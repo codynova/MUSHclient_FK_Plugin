@@ -1,0 +1,806 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE muclient>
+
+<muclient>
+	<plugin
+			name="Custom_FK_Interface"
+			author="Cody Persinger"
+			id="c31b4113bc57049685d5a970"
+			language="Lua"
+			purpose="A custom interface for playing Forgotten Kingdoms MUD"
+			date_written="2017-01-22"
+			requires="4.40"
+			save_state="y"
+			version="1.0">
+		<description trim="y">
+			<![CDATA[
+                Install this plugin to play Forgotten Kingdoms MUD in style.
+            ]]>
+		</description>
+	</plugin>
+	<triggers>
+		<trigger
+				name="InventoryTrigger"
+				enabled="y"
+				regexp="y"
+				multi_line="y"
+				lines_to_match="15"
+				match="^\<\d*%hp \d*m \d*%mv\> You are carrying:\n((\s{5}.*\n)|(\(\s?\d?\).*\n))*[\n]$"
+				script="ListInventory"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="InventoryDropTrigger"
+				enabled="y"
+				regexp="n"
+				match="You drop *"
+				script="RefreshInventoryTrigger"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="InventoryGetTrigger"
+				enabled="y"
+				regexp="n"
+				match="You get *"
+				script="RefreshInventoryAndBackpackTrigger"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="BackpackPutTrigger"
+				enabled="y"
+				regexp="n"
+				match="You put * in * pack."
+				script="RefreshInventoryAndBackpackTrigger"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="BackpackTrigger"
+				enabled="y"
+				regexp="y"
+				multi_line="y"
+				lines_to_match="30"
+				match="^\n\<\d*%hp \d*m \d*%mv\> a leather pack contains:\n((\s{5}.*\n)|(\(\s?\d?\).*\n))*[\n]$"
+				script="ListBackpack"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="StatusTrigger"
+				enabled="y"
+				regexp="y"
+				multi_line="n"
+				omit_from_output="y"
+				match="^\<\d*%hp \d*m \d*%mv\> $"
+				send_to="12"
+				sequence="100">
+				<send>ListStatus "%0"</send>
+		</trigger>
+		<!--<trigger
+				name="ExitTrigger1"
+				enabled="y"
+				regexp="y"
+				multi_line="n"
+				omit_from_output="n"
+				match="^ ((N-)|(S-)|(E-)|(W-)|(U-)|(D-)|(NE-)|(SE-)|(NW-)|(SW-)).*"
+				script="RefreshExitTrigger"
+				sequence="100">
+		</trigger>
+		<trigger
+				name="ExitTrigger2"
+				enabled="n"
+				regexp="y"
+				multi_line="y"
+				lines_to_match="8"
+				match="^\<\d*%hp \d*m \d*%mv\>(\s+(N|S|E|W|U|D|NE|SE|NW|SW)\s{8}.*\n)*[\n]$"
+				script="ListExit"
+				sequence="100">
+		</trigger>-->
+	</triggers>
+	<script>
+		<![CDATA[
+
+
+
+
+
+
+-- TRIGGER FUNCTIONS
+
+
+		function ListStatus(statusText)
+
+			WindowRectOp(
+				statusWindow,
+				2,
+				0, 0, 0, 0,
+				ColourNameToRGB("black")
+			)
+			TitleStatus()
+
+			statusHP, statusMP, statusMV = string.match(statusText, "(%d+)%%hp (%d+)m (%d+)%%mv")
+
+			newHPPercent = statusHP / 100
+			newMPPercent = statusMP / 100
+			newMVPercent = statusMV / 100
+
+			newHPWidth = (300 * newHPPercent) + statusBarLeftPos
+			newMPWidth = (300 * newMPPercent) + statusBarLeftPos
+			newMVWidth = (300 * newMVPercent) + statusBarLeftPos
+
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 45, statusBarFullPos, 60,
+				ColourNameToRGB("gray")
+			)
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 80, statusBarFullPos, 95,
+				ColourNameToRGB("gray")
+			)
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 115, statusBarFullPos, 130,
+				ColourNameToRGB("gray")
+			)
+
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 45, newHPWidth, 60,
+				ColourNameToRGB("red")
+			)
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 80, newMPWidth, 95,
+				ColourNameToRGB("blue")
+			)
+			WindowRectOp(
+				statusWindow,
+				2,
+				statusBarLeftPos, 115, newMVWidth, 130,
+				ColourNameToRGB("green")
+			)
+
+			WindowText(
+            	statusWindow,
+            	"defaultFontStyle",
+            	statusHP .. "%",
+            	statusPercentLeftPos, 45, 0, 65,
+            	ColourNameToRGB("white"),
+            	false
+			)
+			WindowText(
+            	statusWindow,
+            	"defaultFontStyle",
+            	statusMP .. "%",
+            	statusPercentLeftPos, 80, 0, 100,
+            	ColourNameToRGB("white"),
+            	false
+			)
+			WindowText(
+            	statusWindow,
+            	"defaultFontStyle",
+            	statusMV .. "%",
+            	statusPercentLeftPos, 115, 0, 135,
+            	ColourNameToRGB("white"),
+            	false
+			)
+		end -- TriggerBarRefresh
+
+
+
+
+
+		function ListExit()
+			textYPos = 25
+			textYIncrement = 15
+			newCurrentLine = GetLinesInBufferCount()
+			readLineLength = newCurrentLine - oldCurrentLine
+			WindowRectOp(
+				exitWindow,
+				2,
+				0, 0, 0, 0,
+				ColourNameToRGB("black")
+			)
+			TitleExit()
+			for i = readLineLength, 1, -1 do
+				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
+				oldOutputTextLine = outputTextLine
+				outputTextLine = string.gsub(oldOutputTextLine, "<(%d+)%%hp (%d+)m (%d+)%%mv> ", "")
+				WindowText(
+            		exitWindow,
+            		"defaultFontStyle",
+            		outputTextLine,
+            		15, textYPos, 0, exitWindowHeight,
+            		ColourNameToRGB("white"),
+            		false
+				)
+				oldTextYPos = textYPos
+				textYPos = oldTextYPos + textYIncrement
+			end -- for
+			DeleteLines(readLineLength)
+			EnableTrigger("ExitTrigger2", false)
+		end -- ListExit
+
+
+
+
+		function ListInventory()
+			textYPos = 25
+			textYIncrement = 15
+			newCurrentLine = GetLinesInBufferCount()
+			readLineLength = newCurrentLine - oldCurrentLine
+			WindowRectOp(
+				inventoryWindow,
+				2,
+				0, 0, 0, 0,
+				ColourNameToRGB("black")
+			)
+			TitleInventory()
+			for i = readLineLength-2, 1, -1 do
+				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
+				WindowText(
+            		inventoryWindow,
+            		"defaultFontStyle",
+            		outputTextLine,
+            		15, textYPos, 0, inventoryWindowHeight,
+            		ColourNameToRGB("white"),
+            		false
+				)
+				oldTextYPos = textYPos
+				textYPos = oldTextYPos + textYIncrement
+			end -- for
+			DeleteLines(readLineLength-1)
+			if triggeredRefresh == true then
+				triggeredRefresh = false
+				RefreshBackpackTrigger()
+			end
+		end -- ListInventory
+
+
+
+
+		function ListBackpack()
+			textYPos = 25
+			textYIncrement = 15
+			newCurrentLine = GetLinesInBufferCount()
+			readLineLength = newCurrentLine - oldCurrentLine
+			WindowRectOp(
+				backpackWindow,
+				2,
+				0, 0, 0, 0,
+				ColourNameToRGB("black")
+			)
+			TitleBackpack()
+			for i = readLineLength-2, 1, -1 do
+				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
+				WindowText(
+            		backpackWindow,
+            		"defaultFontStyle",
+            		outputTextLine,
+            		15, textYPos, 0, backpackWindowHeight,
+            		ColourNameToRGB("white"),
+            		false
+				)
+				oldTextYPos = textYPos
+				textYPos = oldTextYPos + textYIncrement
+			end -- for
+			DeleteLines(readLineLength-1)
+		end -- ListBackpack
+
+
+
+
+
+-- EXIT WINDOW
+
+		function CreateWindowExit()
+			exitWindow = "win_exitWindow"
+    	    WindowCreate(
+        	    exitWindow,
+            	miniWindowLeftPos, exitWindowYPos, windowWidth, exitWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+      		)
+			WindowSetZOrder(exitWindow, windowZOrder)
+        	WindowFont(
+            	exitWindow,
+            	"defaultFontStyle",
+            	"Inconsolata", 10,
+            	true, false, false, false
+        	)
+        	WindowFont(
+            	exitWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+        	WindowAddHotspot(
+            	exitWindow,
+            	"refresh_exit_hotspot",
+            	0, 0, 60, showHideWindowHeight,
+				"", "", "", "",
+            	"RefreshExitHotspot",
+            	"Refresh Exits",
+            	miniwin.cursor_hand,
+            	4
+        	)
+		end -- CreateWindowExit
+		function TitleExit()
+        	WindowText(
+            	exitWindow,
+            	"titleFontStyle",
+            	"EXIT",
+            	windowTitleLeftPos, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+			TitleExitShowHide()
+		end -- TitleExit
+
+
+
+
+
+-- INVENTORY WINDOW
+
+		function CreateWindowInventory()
+        	inventoryWindow = "win_inventoryWindow"
+        	WindowCreate(
+            	inventoryWindow,
+            	miniWindowLeftPos, inventoryWindowYPos, windowWidth, inventoryWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(inventoryWindow, windowZOrder)
+        	WindowFont(
+            	inventoryWindow,
+            	"defaultFontStyle",
+            	"Inconsolata", 10,
+            	true, false, false, false
+        	)
+        	WindowFont(
+            	inventoryWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+        	WindowAddHotspot(
+            	inventoryWindow,
+            	"refresh_inventory_hotspot",
+            	0, 0, 45, showHideWindowHeight,
+				"", "", "", "",
+            	"RefreshInventoryHotspot",
+            	"Refresh Inventory",
+            	miniwin.cursor_hand,
+            	4
+        	)
+		end -- CreateWindowInventory
+		function TitleInventory()
+        	WindowText(
+            	inventoryWindow,
+            	"titleFontStyle",
+            	"INV",
+            	windowTitleLeftPos, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+			TitleInventoryShowHide()
+		end -- TitleInventory
+
+
+
+
+-- BACKPACK WINDOW
+
+		function CreateWindowBackpack()
+        	backpackWindow = "win_backpackWindow"
+        	WindowCreate(
+            	backpackWindow,
+            	miniWindowLeftPos, backpackWindowYPos, windowWidth, backpackWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(backpackWindow, windowZOrder)
+        	WindowFont(
+            	backpackWindow,
+            	"defaultFontStyle",
+            	"Inconsolata", 10,
+            	true, false, false, false
+        	)
+        	WindowFont(
+            	backpackWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+        	WindowAddHotspot(
+            	backpackWindow,
+            	"refresh_backpack_hotspot",
+            	0, 0, 60, showHideWindowHeight,
+				"", "", "", "",
+            	"RefreshBackpackHotspot",
+            	"Refresh Backpack",
+            	miniwin.cursor_hand,
+            	4
+        	)
+		end -- CreateWindowBackpack
+		function TitleBackpack()
+        	WindowText(
+            	backpackWindow,
+            	"titleFontStyle",
+            	"PACK",
+            	windowTitleLeftPos, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+			TitleBackpackShowHide()
+		end -- TitleBackpack
+
+
+
+
+-- STATUS WINDOW
+		function CreateWindowStatus()
+        	statusWindow = "win_statusWindow"
+        	WindowCreate(
+            	statusWindow,
+            	miniWindowLeftPos, statusWindowYPos, windowWidth, statusWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(statusWindow, windowZOrder)
+        	WindowFont(
+            	statusWindow,
+            	"defaultFontStyle",
+            	"Inconsolata", 10,
+            	true, false, false, false
+        	)
+        	WindowFont(
+            	statusWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+        	WindowAddHotspot(
+            	statusWindow,
+            	"refresh_status_hotspot",
+            	0, 0, 60, showHideWindowHeight,
+				"", "", "", "",
+            	"RefreshStatusHotspot",
+            	"Refresh Status",
+            	miniwin.cursor_hand,
+            	4
+        	)
+		end -- CreateWindowStatus
+		function TitleStatus()
+        	WindowText(
+            	statusWindow,
+            	"titleFontStyle",
+            	"STAT",
+            	windowTitleLeftPos, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+			TitleStatusShowHide()
+		end -- TitleStatus
+
+
+
+
+
+-- SHOW / HIDE WINDOWS
+		function CreateWindowShowHide()
+        	exitShowHideWindow = "win_exitShowHideWindow"
+        	WindowCreate(
+            	exitShowHideWindow,
+            	showHideWindowLeftPos, exitWindowYPos, showHideWindowWidth, showHideWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(exitShowHideWindow, showHideWindowZOrder)
+        	WindowFont(
+            	exitShowHideWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+
+        	inventoryShowHideWindow = "win_inventoryShowHideWindow"
+        	WindowCreate(
+            	inventoryShowHideWindow,
+            	showHideWindowLeftPos, inventoryWindowYPos, showHideWindowWidth, showHideWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(inventoryShowHideWindow, showHideWindowZOrder)
+        	WindowFont(
+            	inventoryShowHideWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+
+        	backpackShowHideWindow = "win_backpackShowHideWindow"
+        	WindowCreate(
+            	backpackShowHideWindow,
+            	showHideWindowLeftPos, backpackWindowYPos, showHideWindowWidth, showHideWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(backpackShowHideWindow, showHideWindowZOrder)
+        	WindowFont(
+            	backpackShowHideWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+
+        	statusShowHideWindow = "win_statusShowHideWindow"
+        	WindowCreate(
+            	statusShowHideWindow,
+            	showHideWindowLeftPos, statusWindowYPos, showHideWindowWidth, showHideWindowHeight,
+            	0, 2, ColourNameToRGB("black")
+        	)
+			WindowSetZOrder(statusShowHideWindow, showHideWindowZOrder)
+        	WindowFont(
+            	statusShowHideWindow,
+            	"titleFontStyle",
+            	"Inconsolata", 14,
+            	true, false, false, false
+        	)
+		end -- CreateWindowShowHide()
+
+
+
+
+
+
+-- SHOW / HIDE TITLES
+		function TitleExitShowHide()
+        	WindowText(
+            	exitShowHideWindow,
+            	"titleFontStyle",
+            	"O",
+            	0, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+		end -- TitleExitShowHide
+		function TitleInventoryShowHide()
+        	WindowText(
+            	inventoryShowHideWindow,
+            	"titleFontStyle",
+            	"O",
+            	0, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+		end -- TitleInventoryShowHide
+		function TitleBackpackShowHide()
+        	WindowText(
+            	backpackShowHideWindow,
+            	"titleFontStyle",
+            	"O",
+            	0, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+		end -- TitleBackpackShowHide
+		function TitleStatusShowHide()
+        	WindowText(
+            	statusShowHideWindow,
+            	"titleFontStyle",
+            	"O",
+            	0, 0, 0, 0,
+            	ColourNameToRGB("white"), false
+        	)
+		end -- TitleStatusShowHide
+
+
+
+
+
+
+-- SHOW / HIDE HOTSPOTS
+		function HotspotShowHide()
+        	WindowAddHotspot(
+            	exitShowHideWindow,
+            	"showhide_exit_hotspot",
+            	0, 0, 0, showHideTextHeight,
+				"", "", "", "",
+            	"ShowHideExit",
+            	"Show / Hide Exit Window",
+            	miniwin.cursor_hand,
+            	4
+        	)
+        	WindowAddHotspot(
+            	inventoryShowHideWindow,
+            	"showhide_inventory_hotspot",
+            	0, 0, 0, showHideTextHeight,
+				"", "", "", "",
+            	"ShowHideInventory",
+            	"Show / Hide Inventory Window",
+            	miniwin.cursor_hand,
+            	4
+        	)
+        	WindowAddHotspot(
+            	backpackShowHideWindow,
+            	"showhide_backpack_hotspot",
+            	0, 0, 0, showHideTextHeight,
+				"", "", "", "",
+            	"ShowHideBackpack",
+            	"Show / Hide Backpack Window",
+            	miniwin.cursor_hand,
+            	4
+        	)
+        	WindowAddHotspot(
+            	statusShowHideWindow,
+            	"showhide_status_hotspot",
+            	0, 0, 0, showHideTextHeight,
+				"", "", "", "",
+            	"ShowHideStatus",
+            	"Show / Hide Status Window",
+            	miniwin.cursor_hand,
+            	4
+        	)
+		end -- HotspotShowHide
+
+
+
+
+
+
+-- SHOW ALL WINDOWS
+		function ShowAllWindows()
+			WindowShow(exitWindow, true)
+        	WindowShow(inventoryWindow, true)
+			WindowShow(backpackWindow, true)
+			WindowShow(statusWindow, true)
+			WindowShow(exitShowHideWindow, true)
+			WindowShow(inventoryShowHideWindow, true)
+			WindowShow(backpackShowHideWindow, true)
+			WindowShow(statusShowHideWindow, true)
+		end -- ShowAllWindows
+
+
+
+
+
+
+-- REFRESH FUNCTIONS		
+		function RefreshExitHotspot()
+			SendNoEcho("l")
+			oldCurrentLine = GetLinesInBufferCount()
+		end -- RefreshExit
+
+		function RefreshExitTrigger()
+			EnableTrigger("ExitTrigger2", true)
+			DoAfterSpecial(0.3, 'oldCurrentLine = GetLinesInBufferCount()', 12)
+			DoAfterSpecial(0.6, 'SendNoEcho("exit")', 12)
+		end -- RefreshExit
+
+        function RefreshInventoryHotspot()
+			SendNoEcho("inv")
+			oldCurrentLine = GetLinesInBufferCount() - 1
+        end -- RefreshInventoryHotspot
+
+        function RefreshInventoryTrigger()
+			SendNoEcho("inv")
+			oldCurrentLine = GetLinesInBufferCount() + 1
+        end -- RefreshInventoryTrigger
+
+        function RefreshBackpackHotspot()
+			SendNoEcho("l i pa")
+			oldCurrentLine = GetLinesInBufferCount() - 1
+        end -- RefreshBackpackHotspot
+
+        function RefreshBackpackTrigger()
+			SendNoEcho("l i pa")
+			oldCurrentLine = GetLinesInBufferCount() - 1
+        end -- RefreshBackpackHotspot
+
+		function RefreshInventoryAndBackpackTrigger()
+			SendNoEcho("inv")
+			oldCurrentLine = GetLinesInBufferCount() + 1
+			triggeredRefresh = true
+		end -- RefreshInventoryAndBackpackTrigger
+
+
+
+
+
+
+-- SHOW / HIDE FUNCTIONS
+		function ShowHideExit()
+			currentState = WindowInfo(exitWindow, 5)
+			if currentState == true then
+				WindowShow(exitWindow, false)
+			else WindowShow(exitWindow, true)
+			end
+		end -- ShowHideExit
+
+
+		function ShowHideInventory()
+			currentState = WindowInfo(inventoryWindow, 5)
+			if currentState == true then
+				WindowShow(inventoryWindow, false)
+			else WindowShow(inventoryWindow, true)
+			end
+		end -- ShowHideInventory
+
+
+		function ShowHideBackpack()
+			currentState = WindowInfo(backpackWindow, 5)
+			if currentState == true then
+				WindowShow(backpackWindow, false)
+			else WindowShow(backpackWindow, true)
+			end
+		end -- ShowHideBackpack
+
+
+		function ShowHideStatus()
+			currentState = WindowInfo(statusWindow, 5)
+			if currentState == true then
+				WindowShow(statusWindow, false)
+			else WindowShow(statusWindow, true)
+			end
+		end -- ShowHideBackpack
+
+
+
+
+
+
+-- INITIALIZATION
+
+		worldwindowWidth = GetInfo(264)
+		worldWindowHeight = GetInfo(263)
+		miniWindowLeftPos = 864
+		triggeredRefresh = false
+
+		windowZOrder = 50
+		showHideWindowZOrder = 100
+
+		windowWidth = 400
+		windowTitleLeftPos = 7
+
+		showHideLeftPos = 385
+		showHideRightPos = 400
+		showHideTextHeight = 20
+		showHideWindowLeftPos = 1235
+		showHideWindowWidth = 17
+		showHideWindowHeight = 24
+
+		inventoryWindowHeight = 125
+		inventoryWindowYPos = 0
+
+		backpackWindowHeight = 400
+		backpackWindowYPos = inventoryWindowHeight
+
+		exitWindowHeight = 250
+		exitWindowYPos = backpackWindowYPos + backpackWindowHeight
+
+		statusWindowHeight = 200
+		statusWindowYPos = exitWindowYPos + exitWindowHeight
+		statusBarLeftPos = 25
+		statusBarFullPos = 325
+		statusPercentLeftPos = 345
+
+		function Init()
+			CreateWindowShowHide()
+			HotspotShowHide()
+
+			CreateWindowExit()
+			TitleExit()
+
+			CreateWindowInventory()
+			TitleInventory()
+
+			CreateWindowBackpack()
+			TitleBackpack()
+
+			CreateWindowStatus()
+			TitleStatus()
+			
+			ShowAllWindows()
+		end -- Init 
+
+		Init()
+
+
+
+
+
+	]]>
+	</script>
+</muclient>
