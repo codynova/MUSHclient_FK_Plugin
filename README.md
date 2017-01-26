@@ -5,6 +5,7 @@ This is a MUSHclient plugin for Forgotten Kingdoms.
 1. Inventory
 2. Backpack
 3. Player Status
+4. Area Exits
 
 
 ## INSTALLATION
@@ -16,3 +17,7 @@ This is a MUSHclient plugin for Forgotten Kingdoms.
 
 ## SCREENSHOT
 [![](https://github.com/codypersinger/MUSHclient_FK_Plugin/blob/master/screenshot.PNG?raw=true)](https://github.com/codypersinger/MUSHclient_FK_Plugin/blob/master/screenshot.PNG?raw=true)
+
+
+### Special Thanks
+An extra special thanks to Nick Gammon for creating MUSHclient, and to MUSHclient forum user Worstje for helping with a particularly tricky Exits trigger.

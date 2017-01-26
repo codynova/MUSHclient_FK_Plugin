@@ -8,7 +8,7 @@
 			id="c31b4113bc57049685d5a970"
 			language="Lua"
 			purpose="A custom interface for playing Forgotten Kingdoms MUD"
-			date_written="2017-01-22"
+			date_written="2017-01-25"
 			requires="4.40"
 			save_state="y"
 			version="1.0">
@@ -74,26 +74,80 @@
 				sequence="100">
 				<send>ListStatus "%0"</send>
 		</trigger>
-		<!--<trigger
-				name="ExitTrigger1"
-				enabled="y"
-				regexp="y"
-				multi_line="n"
-				omit_from_output="n"
-				match="^ ((N-)|(S-)|(E-)|(W-)|(U-)|(D-)|(NE-)|(SE-)|(NW-)|(SW-)).*"
-				script="RefreshExitTrigger"
-				sequence="100">
-		</trigger>
 		<trigger
-				name="ExitTrigger2"
-				enabled="n"
-				regexp="y"
-				multi_line="y"
-				lines_to_match="8"
-				match="^\<\d*%hp \d*m \d*%mv\>(\s+(N|S|E|W|U|D|NE|SE|NW|SW)\s{8}.*\n)*[\n]$"
-				script="ListExit"
-				sequence="100">
-		</trigger>-->
+			enabled="y"
+			multi_line="n"
+			match="^(.*?([NSWEUD]|[NS][EW])-\w.*)$"
+			regexp="y"
+			send_to="12"
+			sequence="100">
+			<send>
+
+				function DirectionAlreadyExists(tab, val)
+					for index, value in ipairs (tab) do
+						if value == val then
+							return true
+						end -- if
+					end -- for
+					return false
+				end -- DirectionAlreadyExists
+
+
+				function EmptyCurrentDirections()
+					for k in pairs (currentDirections) do
+						currentDirections [k] = nil
+					end
+				end -- EmptyCurrentDirections
+
+
+				function RedrawExitWindow()
+					exitWindowDirectionTextYPos = globalTextYPos
+					WindowRectOp(
+						exitWindow,
+						2,
+						0, 0, 0, 0,
+						ColourNameToRGB("black")
+					)
+					TitleExit()
+				end -- RedrawExitWindow
+
+
+				function DisplayExit(outputText)
+					local textYIncrement = globalTextYIncrement
+					WindowText(
+            			exitWindow,
+            			"defaultFontStyle",
+            			outputText,
+            			15, exitWindowDirectionTextYPos, 0, exitWindowHeight,
+            			ColourNameToRGB("white"),
+            			false
+					)
+					local oldTextYPos = exitWindowDirectionTextYPos
+					exitWindowDirectionTextYPos = oldTextYPos + textYIncrement
+				end -- DisplayExit
+
+
+				local line = "%0"
+				local exit_re = rex.new("\\\\s([NSWEUD]|[NS][EW])-\\\\w")
+				local s, e, m = exit_re:match(line, 1)
+				while (s ~= nil) do
+					local new_s, new_e, new_m = exit_re:match(line, s+1)
+					local exitName = m[1]
+  					local exitDescription = line:sub(e, (new_s or 0)-1)
+
+					if DirectionAlreadyExists (currentDirections, exitName) then
+						EmptyCurrentDirections()
+						RedrawExitWindow()
+						table.insert(currentDirections, exitName)
+						DisplayExit(exitName .. "  " .. exitDescription)
+					else
+						table.insert(currentDirections, exitName)
+  						DisplayExit(exitName .. "  " .. exitDescription)
+					end
+					s,e,m = new_s, new_e, new_m
+				end
+			</send>
+		</trigger>
 	</triggers>
 	<script>
 		<![CDATA[
@@ -102,9 +156,7 @@
 
 
 
-
 -- TRIGGER FUNCTIONS
-
 
 		function ListStatus(statusText)
 
@@ -122,9 +174,9 @@
 			newMPPercent = statusMP / 100
 			newMVPercent = statusMV / 100
 
-			newHPWidth = (300 * newHPPercent) + statusBarLeftPos
-			newMPWidth = (300 * newMPPercent) + statusBarLeftPos
-			newMVWidth = (300 * newMVPercent) + statusBarLeftPos
+			newHPWidth = (statusBarFullLength * newHPPercent) + statusBarLeftPos
+			newMPWidth = (statusBarFullLength * newMPPercent) + statusBarLeftPos
+			newMVWidth = (statusBarFullLength * newMVPercent) + statusBarLeftPos
 
 			WindowRectOp(
 				statusWindow,
@@ -193,46 +245,11 @@
 
 
 
-
-		function ListExit()
-			textYPos = 25
-			textYIncrement = 15
-			newCurrentLine = GetLinesInBufferCount()
-			readLineLength = newCurrentLine - oldCurrentLine
-			WindowRectOp(
-				exitWindow,
-				2,
-				0, 0, 0, 0,
-				ColourNameToRGB("black")
-			)
-			TitleExit()
-			for i = readLineLength, 1, -1 do
-				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
-				oldOutputTextLine = outputTextLine
-				outputTextLine = string.gsub(oldOutputTextLine, "<(%d+)%%hp (%d+)m (%d+)%%mv> ", "")
-				WindowText(
-            		exitWindow,
-            		"defaultFontStyle",
-            		outputTextLine,
-            		15, textYPos, 0, exitWindowHeight,
-            		ColourNameToRGB("white"),
-            		false
-				)
-				oldTextYPos = textYPos
-				textYPos = oldTextYPos + textYIncrement
-			end -- for
-			DeleteLines(readLineLength)
-			EnableTrigger("ExitTrigger2", false)
-		end -- ListExit
-
-
-
-
 		function ListInventory()
-			textYPos = 25
-			textYIncrement = 15
-			newCurrentLine = GetLinesInBufferCount()
-			readLineLength = newCurrentLine - oldCurrentLine
+			local textYPos = globalTextYPos
+			local textYIncrement = globalTextYIncrement
+			local newCurrentLine = GetLinesInBufferCount()
+			local readLineLength = newCurrentLine - oldCurrentLine
 			WindowRectOp(
 				inventoryWindow,
 				2,
@@ -241,7 +258,7 @@
 			)
 			TitleInventory()
 			for i = readLineLength-2, 1, -1 do
-				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
+				local outputTextLine = GetLineInfo(newCurrentLine - i, 1)
 				WindowText(
             		inventoryWindow,
             		"defaultFontStyle",
@@ -250,7 +267,7 @@
             		ColourNameToRGB("white"),
             		false
 				)
-				oldTextYPos = textYPos
+				local oldTextYPos = textYPos
 				textYPos = oldTextYPos + textYIncrement
 			end -- for
 			DeleteLines(readLineLength-1)
@@ -264,10 +281,10 @@
 
 
 		function ListBackpack()
-			textYPos = 25
-			textYIncrement = 15
-			newCurrentLine = GetLinesInBufferCount()
-			readLineLength = newCurrentLine - oldCurrentLine
+			local textYPos = globalTextYPos
+			local textYIncrement = globalTextYIncrement
+			local newCurrentLine = GetLinesInBufferCount()
+			local readLineLength = newCurrentLine - oldCurrentLine
 			WindowRectOp(
 				backpackWindow,
 				2,
@@ -276,7 +293,7 @@
 			)
 			TitleBackpack()
 			for i = readLineLength-2, 1, -1 do
-				outputTextLine = GetLineInfo(newCurrentLine - i, 1)
+				local outputTextLine = GetLineInfo(newCurrentLine - i, 1)
 				WindowText(
             		backpackWindow,
             		"defaultFontStyle",
@@ -285,7 +302,7 @@
             		ColourNameToRGB("white"),
             		false
 				)
-				oldTextYPos = textYPos
+				local oldTextYPos = textYPos
 				textYPos = oldTextYPos + textYIncrement
 			end -- for
 			DeleteLines(readLineLength-1)
@@ -316,16 +333,6 @@
             	"titleFontStyle",
             	"Inconsolata", 14,
             	true, false, false, false
-        	)
-        	WindowAddHotspot(
-            	exitWindow,
-            	"refresh_exit_hotspot",
-            	0, 0, 60, showHideWindowHeight,
-				"", "", "", "",
-            	"RefreshExitHotspot",
-            	"Refresh Exits",
-            	miniwin.cursor_hand,
-            	4
         	)
 		end -- CreateWindowExit
 		function TitleExit()
@@ -390,6 +397,7 @@
 
 
 
+
 -- BACKPACK WINDOW
 
 		function CreateWindowBackpack()
@@ -437,7 +445,9 @@
 
 
 
+
 -- STATUS WINDOW
+
 		function CreateWindowStatus()
         	statusWindow = "win_statusWindow"
         	WindowCreate(
@@ -458,16 +468,6 @@
             	"Inconsolata", 14,
             	true, false, false, false
         	)
-        	WindowAddHotspot(
-            	statusWindow,
-            	"refresh_status_hotspot",
-            	0, 0, 60, showHideWindowHeight,
-				"", "", "", "",
-            	"RefreshStatusHotspot",
-            	"Refresh Status",
-            	miniwin.cursor_hand,
-            	4
-        	)
 		end -- CreateWindowStatus
 		function TitleStatus()
         	WindowText(
@@ -485,6 +485,7 @@
 
 
 -- SHOW / HIDE WINDOWS
+
 		function CreateWindowShowHide()
         	exitShowHideWindow = "win_exitShowHideWindow"
         	WindowCreate(
@@ -549,6 +550,7 @@
 
 
 -- SHOW / HIDE TITLES
+
 		function TitleExitShowHide()
         	WindowText(
             	exitShowHideWindow,
@@ -592,6 +594,7 @@
 
 
 -- SHOW / HIDE HOTSPOTS
+
 		function HotspotShowHide()
         	WindowAddHotspot(
             	exitShowHideWindow,
@@ -641,6 +644,7 @@
 
 
 -- SHOW ALL WINDOWS
+
 		function ShowAllWindows()
 			WindowShow(exitWindow, true)
         	WindowShow(inventoryWindow, true)
@@ -657,18 +661,8 @@
 
 
 
--- REFRESH FUNCTIONS		
-		function RefreshExitHotspot()
-			SendNoEcho("l")
-			oldCurrentLine = GetLinesInBufferCount()
-		end -- RefreshExit
-
-		function RefreshExitTrigger()
-			EnableTrigger("ExitTrigger2", true)
-			DoAfterSpecial(0.3, 'oldCurrentLine = GetLinesInBufferCount()', 12)
-			DoAfterSpecial(0.6, 'SendNoEcho("exit")', 12)
-		end -- RefreshExit
-
+-- REFRESH FUNCTIONS	
+	
         function RefreshInventoryHotspot()
 			SendNoEcho("inv")
 			oldCurrentLine = GetLinesInBufferCount() - 1
@@ -701,6 +695,7 @@
 
 
 -- SHOW / HIDE FUNCTIONS
+
 		function ShowHideExit()
 			currentState = WindowInfo(exitWindow, 5)
 			if currentState == true then
@@ -708,7 +703,6 @@
 			else WindowShow(exitWindow, true)
 			end
 		end -- ShowHideExit
-
 
 		function ShowHideInventory()
 			currentState = WindowInfo(inventoryWindow, 5)
@@ -718,7 +712,6 @@
 			end
 		end -- ShowHideInventory
 
-
 		function ShowHideBackpack()
 			currentState = WindowInfo(backpackWindow, 5)
 			if currentState == true then
@@ -726,7 +719,6 @@
 			else WindowShow(backpackWindow, true)
 			end
 		end -- ShowHideBackpack
-
 
 		function ShowHideStatus()
 			currentState = WindowInfo(statusWindow, 5)
@@ -743,38 +735,43 @@
 
 -- INITIALIZATION
 
-		worldwindowWidth = GetInfo(264)
-		worldWindowHeight = GetInfo(263)
+		require "lpeg"
+		require "re"
+
 		miniWindowLeftPos = 864
 		triggeredRefresh = false
 
 		windowZOrder = 50
 		showHideWindowZOrder = 100
 
-		windowWidth = 400
+		windowWidth = 350
 		windowTitleLeftPos = 7
 
-		showHideLeftPos = 385
-		showHideRightPos = 400
+		globalTextYIncrement = 18
+		globalTextYPos = 30
+
 		showHideTextHeight = 20
-		showHideWindowLeftPos = 1235
+		showHideWindowLeftPos = 1215
 		showHideWindowWidth = 17
 		showHideWindowHeight = 24
 
-		inventoryWindowHeight = 125
+		inventoryWindowHeight = 150
 		inventoryWindowYPos = 0
 
-		backpackWindowHeight = 400
+		backpackWindowHeight = 460
 		backpackWindowYPos = inventoryWindowHeight
 
-		exitWindowHeight = 250
+		exitWindowHeight = 220
 		exitWindowYPos = backpackWindowYPos + backpackWindowHeight
+		exitWindowDirectionTextYPos = globalTextYPos
+		currentDirections = {} -- used in the exit display trigger
 
-		statusWindowHeight = 200
+		statusWindowHeight = 140
 		statusWindowYPos = exitWindowYPos + exitWindowHeight
 		statusBarLeftPos = 25
-		statusBarFullPos = 325
-		statusPercentLeftPos = 345
+		statusBarFullPos = 275
+		statusBarFullLength = statusBarFullPos - statusBarLeftPos
+		statusPercentLeftPos = 28
 
 		function Init()
 			CreateWindowShowHide()
@@ -796,10 +793,6 @@
 		end -- Init 
 
 		Init()
-
-
-
-
 
 	]]>
 	</script>
